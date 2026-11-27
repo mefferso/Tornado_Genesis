@@ -1,0 +1,29 @@
+{
+  "name": "tornado_genesis",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "node --test tests/unit.test.js",
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:browser": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mefferso/Tornado_Genesis.git"
+  },
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/mefferso/Tornado_Genesis/issues"
+  },
+  "homepage": "https://github.com/mefferso/Tornado_Genesis#readme",
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "vite": "8.4.0"
+  },
+  "private": true
+}
