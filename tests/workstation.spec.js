@@ -4,7 +4,9 @@ test('production assets, rendered views, camera, slicing, and timeline', async (
   const errors = [];
   const assets = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.location().url + ' ' + message.text());
+  });
   page.on('response', response => {
     const url = new URL(response.url());
     if (url.pathname.includes('/assets/')) assets.push([url.pathname, response.status()]);
