@@ -1,0 +1,83 @@
+import { expect, test } from '@playwright/test';
+
+test('production assets, rendered views, camera, slicing, and timeline', async ({ page }, testInfo) => {
+  const errors = [];
+  const assets = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.location().url + ' ' + message.text());
+  });
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (url.pathname.includes('/assets/')) assets.push([url.pathname, response.status()]);
+  });
+  const response = await page.goto('./');
+  expect(response.ok()).toBe(true);
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#viewport-error')).toBeHidden();
+  // SwiftShader throughput differs across hosted runners. Exercise the low-cost
+  // render path before waiting for the frame-rate counter to accumulate samples.
+  await page.locator('#quality').selectOption('Low');
+  await expect(page.locator('#fps')).toContainText(/\d+(\.\d+)? FPS/, { timeout: 25000 });
+  expect(assets).toHaveLength(2);
+  expect(assets.every(([path,status]) => path.startsWith('/Tornado_Genesis/assets/') && status === 200)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('full-supercell.png') });
+  await page.locator('#stage').selectOption('10');
+  await expect(page.locator('#time')).toHaveText('70:00');
+  await expect(page.locator('#story-title')).toHaveText('A surface-connected vortex');
+  await page.locator('#camera').selectOption('tornado');
+  await expect(page.locator('#view-alt')).toHaveText('190 m AGL', { timeout: 15000 });
+  await page.locator('#suggested').click();
+  await expect(page.locator('#slice')).toBeChecked();
+  await expect(page.locator('#slice-alt')).toHaveValue('25');
+  await expect(page.locator('#slice-map')).toBeVisible();
+  await page.locator('#slice-map').focus();
+  await expect(page.locator('#probe')).toContainText('s⁻¹');
+  await page.locator('#slice-preset').selectOption('10');
+  await expect(page.locator('#slice-alt')).toHaveValue('10');
+  await expect(page.locator('#view-alt')).toHaveText('190 m AGL');
+  await page.locator('#clip').selectOption('1');
+  await page.locator('#field').selectOption('stretching');
+  await expect(page.locator('#legend')).toContainText('s⁻²');
+  await page.locator('#clouds').uncheck();
+  await page.locator('#slice').uncheck();
+  await expect(page.locator('#slice-map')).toBeHidden();
+  await page.locator('#clouds').check();
+  await page.locator('#clip').selectOption('0');
+  await page.locator('#seek').fill('4380');
+  await expect(page.locator('#time')).toHaveText('73:00');
+  await page.screenshot({ path: testInfo.outputPath('tornado-close.png') });
+  await page.locator('#stage').selectOption('9');
+  await page.locator('#stage').selectOption('10');
+  await page.locator('#navigation').selectOption('fly');
+  await page.locator('#camera-alt').fill('40');
+  await page.locator('#camera-alt').press('Tab');
+  await expect(page.locator('#view-alt')).toHaveText('40 m AGL');
+  await page.locator('#storm').focus();
+  await page.keyboard.down('e');
+  await expect(page.locator('#view-alt')).not.toHaveText('40 m AGL');
+  await page.keyboard.up('e');
+  await page.locator('#back').click();
+  await expect(page.locator('#time')).toHaveText('69:50');
+  await expect(page.locator('#story-title')).toHaveText('Circulation precedes condensation');
+  await page.locator('#next').click();
+  await expect(page.locator('#time')).toHaveText('70:00');
+  await page.locator('#play').click();
+  await expect(page.locator('#time')).not.toHaveText('70:00');
+  await page.locator('#play').click();
+  await page.locator('#restart').click();
+  await expect(page.locator('#time')).toHaveText('00:00');
+  await expect(page.locator('#story-title')).toHaveText('Before the storm');
+  expect(errors).toEqual([]);
+});
+
+test('mobile layout keeps the viewport and controls reachable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('./');
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#viewport-error')).toBeHidden();
+  await expect(page.locator('#storm')).toBeVisible();
+  await page.locator('#stage').selectOption('0');
+  await expect(page.locator('#story-title')).toHaveText('Before the storm');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});

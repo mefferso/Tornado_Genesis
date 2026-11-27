@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101824">
+  <title>Tornadogenesis Laboratory</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23101824'/%3E%3Cpath d='M9 18c1-7 15-10 20-4s-5 10-13 11c-4 1-5 5 1 6m-5-13c6-4 14-3 13 1-2 4-12 2-16 8' fill='none' stroke='%2384e4e1' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <svg width="37" height="37" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5" fill="none" stroke="currentColor" opacity=".35"/><path d="M10 19c0-6 7-9 13-8 5 1 7 4 5 7-2 4-13 3-13 7 0 2 2 3 6 2M12 15c6-3 12-2 13 0 2 4-7 3-12 5-5 2-4 6 1 9M25 23c5-1 8-5 7-8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"/></svg>
+      <div><h1>Tornadogenesis Laboratory</h1><p>SUPERCELL DYNAMICS WORKSTATION</p></div>
+    </div>
+    <div class="header-actions"><span class="source"><i></i> Procedural training case</span><button id="methods" type="button">Science &amp; methods</button></div>
+  </header>
+
+  <div class="toolbar" aria-label="Camera controls">
+    <label>Camera<select id="camera"></select></label>
+    <label>Navigation<select id="navigation"><option value="orbit">Orbit / pan</option><option value="fly">Fly-through</option></select></label>
+    <label class="altimeter">Camera AGL <input id="camera-alt" type="number" min="3" max="15000" step="1" value="7000"><span>m</span></label>
+    <label>Move speed<select id="movement" aria-label="Camera movement speed"><option value=".05">0.05 km/s</option><option value=".30">0.30 km/s</option><option value="1.5" selected>1.50 km/s</option><option value="6">6.00 km/s</option></select></label>
+    <div class="toolbar-end"><label>Graphics<select id="quality"><option>Low</option><option selected>Balanced</option><option>High</option></select></label><button id="reset" title="Reset camera (R)">Reset view</button><button id="fullscreen" title="Toggle fullscreen (F)">Fullscreen</button></div>
+  </div>
+
+  <main class="workspace">
+    <aside class="sidebar layer-sidebar" aria-label="Visualization controls">
+      <details open id="layer-panel">
+        <summary><span>Visualization layers</span></summary>
+        <div class="panel-body">
+          <label class="stack">Layer preset<select id="preset"></select></label>
+          <div class="section"><h2>Storm structure <small>Conceptual</small></h2>
+            <label class="check"><input type="checkbox" id="clouds" checked> Cloud volume</label>
+            <label class="check"><input type="checkbox" id="rain" checked> Precipitation</label>
+            <label class="check"><input type="checkbox" id="boundaries"> Outflow boundaries</label>
+            <label class="check"><input type="checkbox" id="funnel" checked> Condensation funnel</label>
+            <label class="check"><input type="checkbox" id="dust" checked> Surface dust / debris</label>
+            <label class="slider">Cloud opacity <input type="range" id="cloud-opacity" min="0" max="100" value="100"></label>
+            <label class="slider">Rain opacity <input type="range" id="rain-opacity" min="0" max="100" value="75"></label>
+          </div>
+          <div class="section"><h2>Airflow <small>Procedural</small></h2>
+            <label class="check"><input type="checkbox" id="airflow" checked> Flow markers</label>
+            <label class="check"><input type="checkbox" id="trails" checked> Instantaneous streamlines</label>
+            <label class="check"><input type="checkbox" id="circulation"> Tornado circulation guide</label>
+            <label class="stack">Wind frame<select id="flow-frame"><option>Storm-relative</option><option>Ground-relative</option></select></label>
+          </div>
+          <div class="section"><h2>Reference</h2>
+            <label class="check"><input type="checkbox" id="grid" checked> 5 km distance grid</label>
+            <label class="check"><input type="checkbox" id="axes"> East / north / height axes</label>
+            <label class="check"><input type="checkbox" id="labels" checked> Storm feature labels</label>
+          </div>
+        </div>
+      </details>
+    </aside>
+
+    <section id="viewport" class="viewport" aria-label="Interactive 3D view">
+      <canvas id="storm" aria-label="3D supercell visualization" tabindex="0"></canvas>
+      <div id="loading" class="viewport-message" role="status">Loading the atmospheric scene…</div>
+      <div id="viewport-error" class="viewport-message" role="alert" hidden></div>
+      <div class="view-top">
+        <div class="view-status"><span id="view-label">FULL SUPERCELL</span><small id="view-frame">STORM-RELATIVE FRAME</small><small class="mobile-source">PROCEDURAL TRAINING CASE</small></div>
+        <div class="compass" aria-label="Camera compass">
+          <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="24"/><path d="M32 8v6m0 36v6M8 32h6m36 0h6"/><g id="compass-needle"><path class="north-needle" d="m32 14 6 22-6-4-6 4z"/><text x="32" y="12">N</text></g></svg>
+          <small id="bearing">000°</small>
+        </div>
+      </div>
+      <div id="annotations" aria-hidden="true"></div>
+      <div class="view-bottom"><span id="view-alt">7.000 km AGL</span><span id="fps">— FPS</span></div>
+    </section>
+
+    <aside class="sidebar science-sidebar" aria-label="Scientific explanation and field analysis">
+      <details open id="science-panel"><summary><span>Physical processes</span></summary>
+        <div class="panel-body narrative">
+          <div id="stage-meta"></div><h2 id="story-title"></h2>
+          <p id="story"></p><p id="story-guide"></p>
+          <a id="story-ref" target="_blank" rel="noopener noreferrer"></a>
+          <button id="suggested">Apply suggested layers</button>
+        </div>
+      </details>
+      <details open id="slice-panel"><summary><span>Horizontal section</span></summary>
+        <div class="panel-body slice-body">
+          <label class="check"><input type="checkbox" id="slice"> Scalar field plane</label>
+          <label class="check"><input type="checkbox" id="arrows"> Horizontal vorticity vectors</label>
+          <label class="stack">Field<select id="field"></select></label>
+          <label class="stack">Extent<select id="region"></select></label>
+          <div class="input-pair">
+            <label class="stack">Slice AGL (m)<input type="number" id="slice-alt" min="0" max="15000" step="1" value="100"></label>
+            <label class="stack">Height preset<select id="slice-preset"></select></label>
+          </div>
+          <label class="stack">Scene clipping<select id="clip"><option value="0">Show full depth</option><option value="1">Hide above slice</option><option value="-1">Hide below slice</option></select></label>
+          <label class="slider">Field opacity <input type="range" id="field-opacity" min="5" max="100" value="60"></label>
+          <div id="slice-preview" hidden>
+            <div class="map-title"><span>PLAN VIEW</span><span>↑ N</span></div>
+            <canvas id="slice-map" width="128" height="128" aria-label="Plan view of selected field" tabindex="0"></canvas>
+            <div id="color-scale"></div><div id="legend"></div><output id="probe">Point at the map to sample a value.</output>
+          </div>
+        </div>
+      </details>
+    </aside>
+  </main>
+
+  <footer class="timeline" aria-label="Storm lifecycle timeline">
+    <div class="timeline-top">
+      <div class="playback">
+        <button id="restart" title="Restart at 00:00">↺<span class="sr-only">Restart</span></button>
+        <button id="back" title="Back 10 simulated seconds (←)">−10<span class="sr-only"> seconds</span></button>
+        <button id="play" class="primary" title="Play or pause (Space)">▶ <span>Play</span></button>
+        <button id="next" title="Forward 10 simulated seconds (→)">+10<span class="sr-only"> seconds</span></button>
+      </div>
+      <div class="timeline-stage"><label for="stage">Lifecycle stage</label><select id="stage"></select></div>
+      <div class="timeline-settings"><output id="time">59:00</output><span class="duration">/ 90:00</span><select id="play-speed" aria-label="Playback speed"><option value="15">15×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option><option value="240">240×</option></select><label class="check"><input type="checkbox" id="loop"> Loop</label></div>
+    </div>
+    <input id="seek" type="range" min="0" max="5400" step="1" value="3540" aria-label="Elapsed simulation time">
+    <div id="stage-marks" aria-label="Jump to lifecycle stage"></div>
+  </footer>
+
+  <dialog id="about">
+    <button id="close-methods" aria-label="Close science and methods">Close</button>
+    <h2>Science &amp; methods</h2>
+    <p>This is a conceptual right-moving supercell with procedural, quantitative wind fields. The lifecycle prescribes the appearance and evolution of kinematic features. It does not solve the governing equations.</p>
+    <p>Vorticity, convergence, tilting and stretching are finite-difference diagnostics of one wind field. Cloud, rain, condensation, outflow geometry and surface debris are qualitative. The circulation guide outlines the prescribed radius of peak azimuthal speed in the tornado component.</p>
+    <p>Flow markers travel along streamlines calculated on a frozen-time velocity field. Particle spacing and animation speed do not represent parcel observations or time-dependent trajectories.</p>
+    <p>The lifecycle is one training example. Different storms can organize near-ground rotation through different pathways.</p>
+    <h3>Navigation</h3>
+    <p>Orbit with a left drag, pan with a right drag and zoom with the scroll wheel. In fly-through use drag to look. WASD moves the camera, Q/E lowers/raises it, R resets and F opens fullscreen. Space controls playback. Left/right arrows step the timeline when a control is unfocused.</p>
+    <h3>Research</h3><ul id="references"></ul>
+    <a href="https://github.com/mefferso/Tornado_Genesis/blob/main/docs/SCIENCE.md" target="_blank" rel="noopener noreferrer">Scientific notes and dataset assessment</a>
+  </dialog>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
