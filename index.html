@@ -17,11 +17,22 @@
   </header>
 
   <div class="toolbar" aria-label="Camera controls">
+    <label>Workspace<select id="mode-select"><option value="immersive">Immersive</option><option value="science">Scientific</option><option value="hybrid">Hybrid</option></select></label>
     <label>Camera<select id="camera"></select></label>
     <label>Navigation<select id="navigation"><option value="orbit">Orbit / pan</option><option value="fly">Fly-through</option></select></label>
-    <label class="altimeter">Camera AGL <input id="camera-alt" type="number" min="3" max="15000" step="1" value="7000"><span>m</span></label>
-    <label>Move speed<select id="movement" aria-label="Camera movement speed"><option value=".05">0.05 km/s</option><option value=".30">0.30 km/s</option><option value="1.5" selected>1.50 km/s</option><option value="6">6.00 km/s</option></select></label>
-    <div class="toolbar-end"><label>Graphics<select id="quality"><option>Low</option><option selected>Balanced</option><option>High</option></select></label><button id="reset" title="Reset camera (R)">Reset view</button><button id="fullscreen" title="Toggle fullscreen (F)">Fullscreen</button></div>
+    <label class="altimeter">Camera AGL <input id="camera-alt" type="number" min="2" max="27000" step="1" value="7000"><span>m</span></label>
+    <label>Move speed<select id="movement" aria-label="Camera movement speed"><option value=".005">5 m/s</option><option value=".02">20 m/s</option><option value=".05">0.05 km/s</option><option value=".30">0.30 km/s</option><option value="1.5" selected>1.50 km/s</option><option value="6">6.00 km/s</option></select></label>
+    <details id="camera-tools" class="camera-tools">
+      <summary>Camera tools</summary>
+      <div>
+        <label>Field of view <input id="camera-fov" type="range" min="25" max="100" value="53"></label>
+        <label>Track<select id="tracking"><option value="none">Off</option><option value="tornado">Tornado center</option><option value="meso">Low-level mesocyclone</option></select></label>
+        <label class="check"><input type="checkbox" id="cinematic"> Automatic orbit</label>
+        <label>Bookmarks<select id="bookmarks"></select></label>
+        <button id="save-bookmark">Save view</button><button id="restore-bookmark" disabled>Go to view</button>
+      </div>
+    </details>
+    <div class="toolbar-end"><label>Graphics<select id="quality"><option>Low</option><option selected>Balanced</option><option>High</option><option>Ultra</option></select></label><button id="hide-panels">Hide panels</button><button id="reset" title="Reset camera (R)">Reset view</button><button id="fullscreen" title="Toggle fullscreen (F)">Fullscreen</button></div>
   </div>
 
   <main class="workspace">
@@ -36,19 +47,33 @@
             <label class="check"><input type="checkbox" id="boundaries"> Outflow boundaries</label>
             <label class="check"><input type="checkbox" id="funnel" checked> Condensation funnel</label>
             <label class="check"><input type="checkbox" id="dust" checked> Surface dust / debris</label>
+            <label class="stack">Lighting<select id="lighting"><option value="afternoon">Bright afternoon</option><option value="evening">Evening sunlight</option><option value="overcast">Overcast storm</option><option value="scientific">Scientific lighting</option></select></label>
+            <label class="stack">Illustrative funnel shape<select id="morphology"></select></label>
             <label class="slider">Cloud opacity <input type="range" id="cloud-opacity" min="0" max="100" value="100"></label>
             <label class="slider">Rain opacity <input type="range" id="rain-opacity" min="0" max="100" value="75"></label>
           </div>
           <div class="section"><h2>Airflow <small>Procedural</small></h2>
-            <label class="check"><input type="checkbox" id="airflow" checked> Flow markers</label>
-            <label class="check"><input type="checkbox" id="trails" checked> Instantaneous streamlines</label>
+            <label class="check"><input type="checkbox" id="airflow"> Airflow</label>
+            <label class="check"><input type="checkbox" id="trails" checked> Show traces</label>
+            <label class="stack">Display<select id="flow-mode"><option value="streamlines">Directional streamlines</option><option value="particles">Animated particles</option><option value="dashes">Moving dashed traces</option><option value="vectors">3D wind arrows</option><option value="ribbons">Flow ribbons</option><option value="parcel">Forward parcel paths</option></select></label>
+            <label class="stack">Color by<select id="flow-color"></select></label>
+            <div class="flow-key" id="flow-key"></div>
+            <output class="flow-caption" id="flow-caption"></output>
+            <label class="stack">Airflow ceiling (m AGL)<input type="number" id="flow-top" min="50" max="16000" step="50" value="12000"></label>
+            <label class="slider">Density <input type="range" id="flow-density" min="5" max="100" value="35"></label>
+            <label class="slider">Trail length <input type="range" id="flow-length" min="5" max="100" value="55"></label>
+            <label class="slider">Animation speed <input type="range" id="flow-speed" min="10" max="240" value="100"></label>
+            <label class="slider">Thickness <input type="range" id="flow-width" min="1" max="6" value="2"></label>
+            <label class="slider">Opacity <input type="range" id="flow-opacity" min="5" max="100" value="75"></label>
+            <label class="check"><input type="checkbox" id="xray"> X-ray overlays</label>
+            <label class="check"><input type="checkbox" id="tornado-wind" checked> Include tornado wind kernel</label>
             <label class="check"><input type="checkbox" id="circulation"> Tornado circulation guide</label>
             <label class="stack">Wind frame<select id="flow-frame"><option>Storm-relative</option><option>Ground-relative</option></select></label>
           </div>
           <div class="section"><h2>Reference</h2>
-            <label class="check"><input type="checkbox" id="grid" checked> 5 km distance grid</label>
+            <label class="check"><input type="checkbox" id="grid"> 5 km distance grid</label>
             <label class="check"><input type="checkbox" id="axes"> East / north / height axes</label>
-            <label class="check"><input type="checkbox" id="labels" checked> Storm feature labels</label>
+            <label class="check"><input type="checkbox" id="labels"> Storm feature labels</label>
           </div>
         </div>
       </details>
@@ -65,6 +90,7 @@
           <small id="bearing">000°</small>
         </div>
       </div>
+      <button id="show-panels" type="button" hidden>Show panels</button>
       <div id="annotations" aria-hidden="true"></div>
       <div class="view-bottom"><span id="view-alt">7.000 km AGL</span><span id="fps">— FPS</span></div>
     </section>
@@ -76,6 +102,25 @@
           <p id="story"></p><p id="story-guide"></p>
           <a id="story-ref" target="_blank" rel="noopener noreferrer"></a>
           <button id="suggested">Apply suggested layers</button>
+          <button id="guide" aria-pressed="false">Start guided demonstration</button>
+          <div class="guide-controls" id="guide-controls" hidden>
+            <output id="guide-progress"></output>
+            <button id="guide-prev">Previous stop</button><button id="guide-next">Next stop</button>
+            <p>Prescribed teaching sequence. Pause playback to explore any stop.</p>
+          </div>
+        </div>
+      </details>
+      <details id="iso-panel">
+        <summary><span>3D diagnostic surfaces</span></summary>
+        <div class="panel-body">
+          <label class="check"><input type="checkbox" id="iso-enable"> Show isosurfaces</label>
+          <label class="stack">Scalar<select id="iso-field"></select></label>
+          <label class="stack">Threshold magnitude <input type="number" id="iso-threshold" min="0.000001" step="any" value="0.02"></label>
+          <output class="flow-caption" id="iso-legend"></output>
+          <label class="stack">Ceiling (m AGL)<input type="number" id="iso-top" min="50" max="16000" step="50" value="2200"></label>
+          <div class="inline-pair"><label class="stack">Positive <input type="color" id="iso-positive" value="#ff9860"></label>
+          <label class="stack">Negative <input type="color" id="iso-negative" value="#429ff0"></label></div>
+          <label class="slider">Opacity <input type="range" id="iso-opacity" min="5" max="100" value="70"></label>
         </div>
       </details>
       <details open id="slice-panel"><summary><span>Horizontal section</span></summary>

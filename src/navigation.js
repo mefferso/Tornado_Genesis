@@ -2,6 +2,14 @@ import { Euler, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 export const cameras = {
+  survey: ['Full supercell survey', [34,8.1,40], [11.8,6.1,-6.5]],
+  wall: ['Wall cloud and clear slot', [-1.5,.105,2.4], [.24,.97,-.1]],
+  eye: ['Human eye level · 2 m AGL', [4.2,.002,4.6], [.35,1.05,0]],
+  drone: ['Aerial drone', [5,.37,4.5], [0,.75,0]],
+  approach: ['Low inflow approach', [8.8,.080,6.5], [1,.95,.16]],
+  intercept: ['Tornado intercept', [1.4,.002,1.95], [0,.74,0]],
+  edge: ['Funnel edge', [.115,.028,.06], [.047,.075,-.086]],
+  roof: ['Above the anvil', [16,22,23], [11.5,10,-7]],
   chaser: ['Ground-level chaser', [4.2,.055,4.6], [.35,1.42,0]],
   inflow: ['Southeast inflow', [14,2.8,12], [2,5,-2]],
   rear: ['Southwest rear flank', [-13,2.3,9], [0,3,-1]],
@@ -28,6 +36,16 @@ export function createNavigation(camera, canvas) {
   let mode = 'orbit';
   let transition = null;
   let drag = null;
+  let tracking = 'none';
+  let anchor = null;
+  const trackingPoint = new Vector3();
+  const offset = new Vector3();
+  const targetOf = (state, out) => {
+    const mesocyclone = tracking === 'meso';
+    const [x, y, tiltEast, tiltNorth] = state.rotations[mesocyclone ? 2 : 3];
+    const height = mesocyclone ? 1.1 : .26;
+    return out.set(x / 1000 + tiltEast * height, height, -y / 1000 - tiltNorth * height);
+  };
   const keys = new Set();
   const euler = new Euler(0, 0, 0, 'YXZ');
   const forward = new Vector3();
@@ -35,7 +53,7 @@ export function createNavigation(camera, canvas) {
   const motion = new Vector3();
   const altitude = () => camera.position.y * 1000;
   const setAltitude = meters => {
-    const next = Math.max(.003, Math.min(15, meters / 1000));
+    const next = Math.max(.002, Math.min(27, meters / 1000));
     orbit.target.y += next - camera.position.y;
     camera.position.y = next;
     transition = null;
@@ -51,10 +69,12 @@ export function createNavigation(camera, canvas) {
     }
   };
   const preset = (id, state, immediate = false) => {
+    tracking = 'none';
+    anchor = null;
     const [, p, look] = cameras[id];
     const position = new Vector3(...p);
     const target = new Vector3(...look);
-    if (['base', 'meso', 'tornado', 'surface'].includes(id)) {
+    if (['base', 'meso', 'tornado', 'surface', 'edge', 'intercept', 'wall'].includes(id)) {
       for (const point of [position, target]) {
         point.x += state.x / 1000;
         point.z -= state.y / 1000;
@@ -107,16 +127,48 @@ export function createNavigation(camera, canvas) {
   }, { passive: false });
   return {
     altitude, setAltitude, preset, setMode,
-    frame(dt, speed) {
+    setTracking(value, state) {
+      tracking = value;
+      transition = null;
+      anchor = tracking === 'none' ? null : targetOf(state, new Vector3());
+      if (anchor) {
+        orbit.target.copy(anchor);
+        camera.lookAt(anchor);
+      }
+    },
+    bookmark() {
+      camera.getWorldDirection(forward);
+      const target = mode === 'fly' ? camera.position.clone().add(forward) : orbit.target;
+      return { position: camera.position.toArray(), target: target.toArray(), fov: camera.fov };
+    },
+    restore({ position, target, fov }) {
+      transition = null;
+      tracking = 'none';
+      anchor = null;
+      camera.position.fromArray(position);
+      orbit.target.fromArray(target);
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+      camera.lookAt(orbit.target);
+    },
+    frame(dt, speed, state, cinematic, transitionElapsed = dt) {
       if (transition) {
-        transition.progress = Math.min(1, transition.progress + dt * 1.8);
+        transition.progress = Math.min(1, transition.progress + transitionElapsed * 1.8);
         const t = transition.progress ** 2 * (3 - 2 * transition.progress);
         camera.position.lerpVectors(transition.from, transition.position, t);
         orbit.target.lerpVectors(transition.startTarget, transition.target, t);
         camera.lookAt(orbit.target);
         if (t === 1) transition = null;
-      } else if (mode === 'orbit') {
-        orbit.update();
+      } else {
+        if (anchor) {
+          targetOf(state, trackingPoint);
+          offset.copy(trackingPoint).sub(anchor);
+          camera.position.add(offset);
+          orbit.target.add(offset);
+          anchor.copy(trackingPoint);
+        }
+        orbit.autoRotate = cinematic && !keys.size;
+        if (mode === 'orbit') orbit.update(dt);
       }
       if (keys.size) {
         transition = null;
@@ -133,7 +185,7 @@ export function createNavigation(camera, canvas) {
         camera.position.add(motion);
         if (mode === 'orbit') orbit.target.add(motion);
       }
-      camera.position.y = Math.max(.003, Math.min(15, camera.position.y));
+      camera.position.y = Math.max(.002, Math.min(27, camera.position.y));
       camera.updateMatrixWorld();
     },
   };

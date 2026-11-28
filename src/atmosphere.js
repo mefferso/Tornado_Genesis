@@ -9,9 +9,14 @@ const smooth = (a, b, value) => {
 };
 const pulse = (a, b, c, d, t) => smooth(a, b, t) * (1 - smooth(c, d, t));
 const square = x => x * x;
+const smoothIntegral = (a, b, value) => {
+  const t = clamp((value - a) / (b - a));
+  return (b - a) * t ** 3 * (1 - .5 * t) + Math.max(0, value - b);
+};
 
 export class ProceduralAtmosphere {
   source = 'Procedural kinematics';
+  includeTornadoWind = true;
   atTime(seconds) {
     const t = seconds / 60;
     const convection = smooth(5, 29, t) * (1 - .65 * smooth(79, 90, t));
@@ -20,6 +25,7 @@ export class ProceduralAtmosphere {
     const patches = pulse(42, 51, 68, 87, t);
     const low = pulse(47, 61, 79, 90, t);
     const vortex = pulse(59, 71, 77, 88, t);
+    const tornadoWind = this.includeTornadoWind ? vortex : 0;
     const funnel = pulse(66, 73, 78, 86, t);
     const dust = pulse(63, 70, 79, 87, t);
     const occlusion = smooth(76, 88, t);
@@ -35,19 +41,22 @@ export class ProceduralAtmosphere {
       [11500, 6500, .14, .15, 5300, -14 * outflow, 3400, 4400, 450],
       [-3500 + occlusion * 4900, 700 - occlusion * 3800, -.12, .08, 2000, -16 * outflow, 1700, 2300, 280],
       [x, y, .09, .06, 1110, 13 * low, 790, 1400, 360],
-      [x, y, .075, .05, Math.max(radius * 1.6, 210), 29 * vortex, 280, 1100, 115],
+      [x, y, .075, .05, Math.max(radius * 1.6, 210), 29 * tornadoWind, 280, 1100, 115],
     ];
     const rotations = [
       [0, 0, .27, .22, 3050, 24 * mid, 5100, 3900],
       [-4800, 2100, .19, .20, 2500, -8 * mid, 4900, 2800],
       [x, y, .09, .06, 1390, 24 * low, 930, 1300],
-      [x, y, .075, .05, radius, 66 * vortex, 0, 1400 + 120 * vortex],
+      [x, y, .075, .05, radius, 66 * tornadoWind, 0, 1400 + 120 * vortex],
       [-2050 + 1130 * low, -850 + 450 * low, 0, 0, 450, 7 * patches, 45, 180],
       [-750 + 550 * low, -1400 + 700 * low, 0, 0, 330, 8 * patches, 45, 195],
       [1800 - 750 * low, 800 - 340 * low, 0, 0, 450, 8 * patches, 35, 170],
       [-1650, 310, 0, 0, 420, -5 * patches, 40, 140],
     ];
-    return { seconds, convection, outflow, low, vortex, funnel, dust, occlusion, x, y, radius, top, cloud, drafts, rotations };
+    // Integrate the prescribed spin-up and spin-down so seeking restores the
+    // same condensation texture, including its instantaneous rotation rate.
+    const vortexPhase = seconds * .045 + 36 * (smoothIntegral(59, 71, t) - smoothIntegral(77, 88, t));
+    return { seconds, vortexPhase, convection, outflow, low, vortex, tornadoWind, funnel, dust, occlusion, x, y, radius, top, cloud, drafts, rotations };
   }
 
   velocity(x, y, z, state, out = [0, 0, 0]) {
