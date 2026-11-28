@@ -1,5 +1,7 @@
 import * as T from 'three';
-import { diagnose, toRender, stormMotion } from './atmosphere.js';
+import { diagnose, toRender } from './atmosphere.js';
+import { sampleSurfaces, sampleScalar } from './fieldGeometry.js';
+import { createAirflow } from './flow.js';
 
 const fields = {
   zeta: ['Vertical vorticity ζ', 's⁻¹', [.012,.08,2.6]],
@@ -32,7 +34,7 @@ export function paintSlice(size, context, provider, state, config) {
     const y = cy + region.width / 2 - (j + .5) * step;
     for (let i = 0; i < size; i++) {
       const x = cx - region.width / 2 + (i + .5) * step;
-      const value = diagnose(provider, x, y, config.altitude, state)[config.field];
+      const value = sampleScalar(provider, state, [x, y, config.altitude], config.field);
       const fraction = Math.min(Math.abs(value) / range, 1);
       const extreme = palette[value < 0 ? 0 : 2];
       const mid = palette[1];
@@ -67,18 +69,18 @@ export function createDiagnostics(provider, scene, miniMap) {
   plane.rotation.x = -Math.PI / 2;
   plane.renderOrder = 5;
   const horizontal = line(0xf7b462, .90);
-  const flow = line(0x72e3ea, .34);
+  const airflow = createAirflow(provider, scene);
   const tornado = line(0xffbd74, .84);
   const bounds = line(0x6bd3ff, .89);
   const axes = line(0xdbedea, .66);
-  const points = new T.Points(new T.BufferGeometry(), new T.PointsMaterial({
-    color: 0x9be9f0, size: 2.25, sizeAttenuation: false, transparent: true,
-    opacity: .76, depthTest: false, depthWrite: false,
-  }));
-  const part = new Float32Array(150 * 3);
-  points.geometry.setAttribute('position', new T.BufferAttribute(part, 3).setUsage(T.DynamicDrawUsage));
-  points.frustumCulled = false;
-  for (const [i, object] of [horizontal, flow, tornado, bounds, axes, points].entries()) {
+  const surfaces = [0, 1].map(() => new T.Mesh(new T.BufferGeometry(), new T.MeshLambertMaterial({
+    side: T.FrontSide, transparent: true, depthTest: false, depthWrite: false,
+  })));
+  scene.add(...surfaces, new T.HemisphereLight(0xebf2ff, 0x718abd, 2.3));
+  const key = new T.DirectionalLight(0xffedd9, 1.9);
+  key.position.set(-3, 5, 4);
+  scene.add(key);
+  for (const [i, object] of [horizontal, tornado, bounds, axes, ...surfaces].entries()) {
     object.renderOrder = i + 6;
     scene.add(object);
   }
@@ -90,51 +92,41 @@ export function createDiagnostics(provider, scene, miniMap) {
   }
   setPositions(axes, axisVertices);
   let slice;
-  let paths = [];
+  const layers = [plane, horizontal, tornado, bounds, axes, ...surfaces];
   const visible = (z, config) => !config.clip || (config.clip > 0 ? z <= config.altitude : z >= config.altitude);
   const pushSegment = (target, a, b, config) => {
     if (visible(a[2], config) && visible(b[2], config)) target.push(...toRender(...a), ...toRender(...b));
   };
-  function rebuildFlow(state, config) {
-    const vertices = [];
-    paths = [];
-    const ground = config.region === 2;
-    const count = config.quality === 'Low' ? 56 : 120;
-    const frame = config.groundFlow ? stormMotion : [0, 0, 0];
-    const extent = ground ? 1600 : config.region === 1 ? 18000 : 47000;
-    const interval = ground ? 1.1 : config.region === 1 ? 9 : 21;
-    for (let i = 0; i < count; i++) {
-      const a = i * .61803398875 % 1;
-      const b = i * .75487766625 % 1;
-      let x = state.x + (a - .48) * extent;
-      let y = state.y + (b - .53) * extent * .74;
-      let z = ground ? 10 + i * 43 % 420 : i % 5 < 3 ? 35 + i * 199 % 1300 : 1500 + i * 471 % 10700;
-      const path = [[x, y, z]];
-      const velocity = [0, 0, 0];
-      for (let j = 0; j < 16; j++) {
-        provider.velocity(x, y, z, state, velocity);
-        const u = velocity[0] + frame[0], v = velocity[1] + frame[1], w = velocity[2];
-        provider.velocity(x + u * interval / 2, y + v * interval / 2, z + w * interval / 2, state, velocity);
-        x += (velocity[0] + frame[0]) * interval;
-        y += (velocity[1] + frame[1]) * interval;
-        z = Math.max(3, z + velocity[2] * interval);
-        path.push([x, y, z]);
-        pushSegment(vertices, path[j], path[j + 1], config);
-      }
-      paths.push(path);
-    }
-    setPositions(flow, vertices);
-  }
   return {
     get slice() { return slice; },
-    update(state, config, rebuild) {
+    update(state, config, rebuild, rebuildSurface) {
       plane.visible = config.slice;
       horizontal.visible = config.arrows;
-      flow.visible = config.airflow && config.trails;
-      points.visible = config.airflow;
+      airflow.update(state, config, fieldRegions[config.region], rebuild);
+      for (const { material } of layers) {
+        material.depthTest = !config.xray;
+        material.depthWrite = !config.xray;
+      }
+      for (const [i, surface] of surfaces.entries()) {
+        surface.visible = config.iso && config.isoOpacity > 0;
+        surface.material.color.set(i ? config.isoNegative : config.isoPositive);
+        surface.material.opacity = config.isoOpacity;
+      }
+      if (config.iso && rebuildSurface) {
+        const { x, y, width } = fieldRegions[config.region];
+        const normals = [[], []];
+        const vertices = sampleSurfaces(provider, state, {
+          cx: x ?? state.x, cy: y ?? state.y, width, bottom: 0, top: config.isoTop, field: config.isoField,
+          signed: !fields[config.isoField][3], threshold: config.isoThreshold, clip: config.clip, clipAltitude: config.altitude,
+        }, normals);
+        surfaces.forEach((surface, i) => {
+          setPositions(surface, vertices[i]);
+          surface.geometry.setAttribute('normal', new T.Float32BufferAttribute(normals[i], 3));
+        });
+      }
       axes.visible = config.axes;
       bounds.visible = config.boundaries && state.outflow > .08;
-      tornado.visible = config.circulation && state.vortex > .03;
+      tornado.visible = config.circulation && state.tornadoWind > .03;
       plane.material.opacity = config.fieldOpacity;
       if (rebuild) {
         if (config.slice || config.arrows) {
@@ -167,7 +159,6 @@ export function createDiagnostics(provider, scene, miniMap) {
             setPositions(horizontal, vertices);
           }
         }
-        if (config.airflow) rebuildFlow(state, config);
         if (bounds.visible) {
           const vertices = [];
           for (let i = 0; i < 48; i++) {
@@ -198,18 +189,6 @@ export function createDiagnostics(provider, scene, miniMap) {
           }
           setPositions(tornado, vertices);
         }
-      }
-      if (config.airflow) {
-        for (let i = 0; i < paths.length; i++) {
-          const path = paths[i];
-          const t = (state.seconds * .009 + i * .61803398875) % 1 * (path.length - 1);
-          const a = path[Math.floor(t)], b = path[Math.min(path.length - 1, Math.floor(t) + 1)];
-          const f = t % 1;
-          const p = a.map((v, j) => v + f * (b[j] - v));
-          part.set(visible(p[2], config) ? toRender(...p) : [0, -50, 0], i * 3);
-        }
-        points.geometry.setDrawRange(0, paths.length);
-        points.geometry.attributes.position.needsUpdate = true;
       }
     },
   };

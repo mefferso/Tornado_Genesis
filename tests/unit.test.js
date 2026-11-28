@@ -1,3 +1,4 @@
+import { traceFlow, surfaceCrossing, sampleSurfaces } from '../src/fieldGeometry.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ProceduralAtmosphere, diagnose, toRender, fromRender } from '../src/atmosphere.js';
@@ -71,4 +72,62 @@ test('stage boundaries, timer text, clamping and loop wrapping', () => {
   assert.equal(advanceTime(duration - 1, 4, false), duration);
   assert.equal(advanceTime(duration - 1, 4, true), 3);
   assert.equal(formatTime(64 * 60 + 3), '64:03');
+});
+
+test('vortex texture phase is deterministic and accelerates with circulation', () => {
+  const provider = new ProceduralAtmosphere();
+  const phase = t => provider.atTime(t).vortexPhase;
+  assert.ok(Number.isFinite(phase(4320)));
+  assert.equal(phase(4320), phase(4320));
+  assert.ok(phase(4330) - phase(4320) > phase(3850) - phase(3840));
+  assert.ok(phase(4330) > phase(4320));
+});
+
+test('flow tracing distinguishes frozen snapshots from forward parcels and respects the ROI', () => {
+  const provider = { atTime: seconds => ({ seconds }), velocity: (x, y, z, state) => [state.seconds, 2, 10] };
+  const setup = { steps: 3, step: 2, top: 25, frame: [0, 0, 0] };
+  const frozen = traceFlow(provider, { seconds: 4 }, [0, 0, 0], setup);
+  const times = [];
+  const parcel = traceFlow(provider, { seconds: 4 }, [0, 0, 0], { ...setup, parcel: true, times });
+  assert.deepEqual(frozen, [[0,0,0],[8,4,20],[10,5,25]]);
+  assert.deepEqual(parcel, [[0,0,0],[10,4,20],[13.5,5,25]]);
+  assert.deepEqual(times, [4, 6, 6.5]);
+  assert.equal(traceFlow(provider, { seconds: 5400 }, [0, 0, 0], { ...setup, parcel: true }).length, 1);
+});
+
+test('threshold crossing interpolates signed diagnostic values in ENU', () => {
+  assert.deepEqual(surfaceCrossing([0,10,50], [40,10,50], -.4, -.1, -.25), [20,10,50]);
+  assert.deepEqual(surfaceCrossing([0,0,0], [0,0,40], 0, 2, 1), [0,0,20]);
+});
+
+test('isosurfaces use the shared diagnostic and retain both signs in render coordinates', () => {
+  const provider = { velocity: (x, y, z) => [0, 0, x / 10] };
+  const options = {
+    cx: 0, cy: 0, width: 1000, bottom: 0, top: 500, field: 'w',
+    signed: true, threshold: 20, clip: 1, clipAltitude: 250,
+  };
+  const normals = [[], []];
+  const [positive, negative] = sampleSurfaces(provider, {}, options, normals);
+  assert.equal(normals[0][0], -1);
+  assert.equal(normals[1][0], 1);
+  for (const [vertices, east] of [[positive, .2], [negative, -.2]]) {
+    assert.ok(vertices.length > 0);
+    for (let i = 0; i < vertices.length; i += 3) {
+      assert.ok(Math.abs(vertices[i] - east) < 1e-9);
+      assert.ok(vertices[i + 1] >= 0 && vertices[i + 1] <= .25);
+    }
+  }
+});
+
+test('tornado winds can be suppressed independently of condensation and debris', () => {
+  const provider = new ProceduralAtmosphere();
+  const original = provider.atTime(4380);
+  provider.includeTornadoWind = false;
+  const without = provider.atTime(4380);
+  assert.equal(without.funnel, original.funnel);
+  assert.equal(without.dust, original.dust);
+  assert.equal(without.vortexPhase, original.vortexPhase);
+  assert.equal(without.rotations[3][5], 0);
+  assert.equal(without.drafts[4][5], 0);
+  assert.deepEqual(without.rotations[2], original.rotations[2]);
 });
